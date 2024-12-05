@@ -1,4 +1,5 @@
 import ConnectWalletButton from "@/components/ui/ConnectWalletButton";
+import Image from "next/image";
 
 export default function Home() {
   return (
@@ -10,6 +11,14 @@ export default function Home() {
         Request Tasks is a kanban board for bounties. Create tasks, users claim
         them, <br /> and pay them when they are completed.
       </p>
+
+      <Image
+        src="/cover.png"
+        width={1000}
+        height={1000}
+        alt="Hero Image"
+        className="rounded-lg absolute -bottom-20"
+      />
 
       <ConnectWalletButton switchButton={true} />
     </div>
