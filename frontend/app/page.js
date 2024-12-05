@@ -3,7 +3,7 @@ import Image from "next/image";
 
 export default function Home() {
   return (
-    <div className="h-screen w-screen flex flex-col items-center pt-48 gap-5 text-center">
+    <div className="h-screen w-screen flex flex-col items-center pt-48 gap-5 text-center relative overflow-hidden">
       <h1 className="font-italiana text-5xl font-bold">
         Get Paid for completing tasks
       </h1>
