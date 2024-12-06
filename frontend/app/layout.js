@@ -4,6 +4,7 @@ import ReduxProvider from "@/providers/ReduxProvider";
 import WagmiProvider from "@/providers/WagmiProvider";
 import { Toaster } from "sonner";
 import ConnectWalletModal from "@/components/modal/ConnectWalletModal";
+import LoadingModal from "@/components/modal/LoadingModal";
 
 const lato = Lato({
   weight: ["100", "300", "400", "700", "900"],
@@ -38,9 +39,10 @@ export default function RootLayout({ children }) {
               position="bottom-center"
               richColors
               toastOptions={{
-                className: `flex items-center justify-center text-center rounded-none bg-black text-[var(--primary)] border border-[var(--primary)] ${lato.className}`,
+                className: `flex items-center justify-center text-center rounded-2xl bg-black text-[var(--primary)] border border-[var(--primary)] ${lato.className}`,
               }}
             />
+            <LoadingModal />
             <ConnectWalletModal />
             {children}
           </WagmiProvider>

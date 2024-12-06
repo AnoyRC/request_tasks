@@ -1,47 +1,28 @@
 "use client";
 
 import ConnectWalletButton from "@/components/ui/ConnectWalletButton";
+import useProject from "@/hooks/useProject";
+import useUtils from "@/hooks/useUtils";
+import { toggleCreateProjectModal } from "@/redux/slice/modalSlice";
 import { Button } from "@material-tailwind/react";
 import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { useAccount } from "wagmi";
 
 export default function Project() {
   const router = useRouter();
   const { isConnected } = useAccount();
+  const project = useSelector((state) => state.project.projects);
+  const { loadProjects } = useProject();
+  const dispatch = useDispatch();
+  const { formatAddress } = useUtils();
 
-  const project = [
-    {
-      id: 1,
-      title: "Project Axios",
-      description: "A project for Axios",
-      owner: "0x1234...7890",
-    },
-    {
-      id: 5,
-      title: "Project Axios",
-      description: "A project for Axios",
-      owner: "0x1234...7890",
-    },
-    {
-      id: 2,
-      title: "Project Axios",
-      description: "A project for Axios",
-      owner: "0x1234...7890",
-    },
-    {
-      id: 3,
-      title: "Project Axios",
-      description: "A project for Axios",
-      owner: "0x1234...7890",
-    },
-    {
-      id: 4,
-      title: "Project Axios",
-      description: "A project for Axios",
-      owner: "0x1234...7890",
-    },
-  ];
+  useEffect(() => {
+    // Fetch projects
+    loadProjects();
+  }, []);
 
   return (
     <div className="p-6 first-letter:bg-gray-100 h-screen overflow-y-hidden">
@@ -56,7 +37,9 @@ export default function Project() {
           {isConnected && (
             <Button
               className="bg-blue-500 border border-secondary rounded-full text-background flex items-center justify-center hover:bg-background hover:text-primary hover:border-primary transition-colors duration-300"
-              onClick={() => {}}
+              onClick={() => {
+                dispatch(toggleCreateProjectModal());
+              }}
             >
               Create <Plus size={16} className="ml-2" />
             </Button>
@@ -69,10 +52,10 @@ export default function Project() {
       <div className="w-full flex flex-wrap gap-4">
         {project.map((project) => (
           <div
-            key={project.id}
-            className="bg-white w-[24%] hover:shadow-lg hover:cursor-pointer border-black border p-3 rounded-xl shadow-sm flex flex-col overflow-hidden relative"
+            key={project._id}
+            className="bg-white w-[24%] min-w-[300px] hover:shadow-lg hover:cursor-pointer border-black border p-3 rounded-xl shadow-sm flex flex-col overflow-hidden relative"
             onClick={() => {
-              router.push(`/board/${project.id}`);
+              router.push(`/board/${project._id}`);
             }}
           >
             <div className="flex justify-between items-center">
@@ -91,7 +74,7 @@ export default function Project() {
             <div className="flex w-full items-center space-x-2">
               <p className="text-sm opacity-60">Managed by</p>
               <div className="bg-primary w-fit h-9 text-background flex items-center justify-center rounded-full text-xs opacity-70 px-3">
-                0x2837...2938
+                {formatAddress(project.owner)}
               </div>
             </div>
           </div>
