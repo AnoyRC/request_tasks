@@ -22,6 +22,29 @@ export const createTask = mutation({
   },
 });
 
+export const updateTask = mutation({
+  args: {
+    id: v.id("tasks"),
+    title: v.string(),
+    description: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.patch(args.id, {
+      title: args.title,
+      description: args.description,
+    });
+  },
+});
+
+export const deleteTask = mutation({
+  args: {
+    id: v.id("tasks"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.delete(args.id);
+  },
+});
+
 export const getTasksByProjectId = query({
   args: {
     projectId: v.id("projects"),

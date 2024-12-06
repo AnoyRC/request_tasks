@@ -1,21 +1,50 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Edit2, Send } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Edit2,
+  Send,
+  Loader2,
+  X,
+  RefreshCcw,
+} from "lucide-react";
 import { Button } from "@material-tailwind/react";
 import ProjectHeader from "@/components/layout/board/ProjectHeader";
 import { useDispatch, useSelector } from "react-redux";
-import { toggleCreateTaskModal } from "@/redux/slice/modalSlice";
+import {
+  setSelectedTask,
+  toggleCreateTaskModal,
+  toggleDeleteTaskModal,
+  toggleUpdateTaskModal,
+} from "@/redux/slice/modalSlice";
 import useBoard from "@/hooks/useBoard";
 import { useParams } from "next/navigation";
+import { useAccount } from "wagmi";
+import { setTasks } from "@/redux/slice/boardSlice";
+import { toast } from "sonner";
+import { setCurrentTask, setTaskLoading } from "@/redux/slice/loadingSlice";
+import useUtils from "@/hooks/useUtils";
 
 const Board = () => {
   const dispatch = useDispatch();
   const params = useParams();
-  const { loadTasksByProjectId } = useBoard();
+  const {
+    loadTasksByProjectId,
+    claimTask,
+    changeTaskStatusToInProgress,
+    changeStatusToSubmitted,
+  } = useBoard();
   const tasks = useSelector((state) => state.board.tasks);
+  const { address } = useAccount();
+  const project = useSelector((state) => state.board.project);
+  const isTaskLoading = useSelector((state) => state.loading.taskLoading);
+  const currentTask = useSelector((state) => state.loading.currentTask);
+  const { formatAddress } = useUtils();
 
   useEffect(() => {
+    dispatch(setTasks([]));
     if (params.id) {
       loadTasksByProjectId(params.id);
     }
@@ -34,11 +63,6 @@ const Board = () => {
     { status: "paid", title: "Paid", tasks: [], color: "green" },
   ]);
 
-  const [editingTask, setEditingTask] = useState({
-    status: "",
-    task: undefined,
-  });
-
   useEffect(() => {
     setColumns((prevColumns) =>
       prevColumns.map((col) => ({
@@ -48,134 +72,115 @@ const Board = () => {
     );
   }, [tasks]);
 
-  const addTask = (status, task) => {
-    setColumns((prevColumns) =>
-      prevColumns.map((col) =>
-        col.status === status
-          ? {
-              ...col,
-              tasks: [...col.tasks, { ...task, status: status }],
+  const moveTask = async (sourceStatus, destStatus, taskId) => {
+    if (isTaskLoading) return;
+
+    try {
+      dispatch(setTaskLoading(true));
+
+      if (!address) {
+        toast.error("You need to connect your wallet first");
+        return;
+      }
+
+      const sourceColumn = columns.find((col) =>
+        col.tasks.some((task) => task._id === taskId)
+      );
+      const taskToMove = sourceColumn?.tasks.find(
+        (task) => task._id === taskId
+      );
+
+      dispatch(setCurrentTask(taskToMove));
+
+      if (!taskToMove?.isClaimed) {
+        toast.error("Task must be claimed before it can be moved");
+        return;
+      }
+
+      if (taskToMove?.claimedBy !== address) {
+        toast.error("You can't move a task you didn't claim");
+        return;
+      }
+
+      if (sourceStatus === "todo" && destStatus !== "in-progress") {
+        toast.error("Task can't be moved to this status");
+        return;
+      }
+
+      if (sourceStatus === "in-progress" && destStatus !== "submitted") {
+        toast.error("Task can't be moved to this status");
+        return;
+      }
+
+      if (sourceStatus === "submitted") {
+        toast.error("Task can't be moved to this status");
+        return;
+      }
+
+      if (destStatus === "paid") {
+        toast.error("Task can't be moved to paid status directly");
+        return;
+      }
+
+      if (taskToMove) {
+        setColumns((prevColumns) =>
+          prevColumns.map((col) => {
+            if (col.status === sourceStatus) {
+              return {
+                ...col,
+                tasks: col.tasks.filter((task) => task._id !== taskId),
+              };
             }
-          : col
-      )
-    );
-  };
+            if (col.status === destStatus) {
+              return {
+                ...col,
+                tasks: [...col.tasks, { ...taskToMove, status: destStatus }],
+              };
+            }
+            return col;
+          })
+        );
+      }
 
-  const deleteTask = (status, taskId) => {
-    setColumns((prevColumns) =>
-      prevColumns.map((col) =>
-        col.status === status
-          ? { ...col, tasks: col.tasks.filter((task) => task._id !== taskId) }
-          : col
-      )
-    );
-  };
+      if (sourceStatus === "todo" && destStatus === "in-progress") {
+        await changeTaskStatusToInProgress(taskId, sourceStatus, destStatus);
+      }
 
-  const moveTask = (sourceStatus, destStatus, taskId) => {
-    const sourceColumn = columns.find((col) =>
-      col.tasks.some((task) => task._id === taskId)
-    );
-    const taskToMove = sourceColumn?.tasks.find((task) => task._id === taskId);
+      if (sourceStatus === "in-progress" && destStatus === "submitted") {
+        await changeStatusToSubmitted(taskId, sourceStatus, destStatus);
+      }
+    } catch (error) {
+      console.log(error);
+      toast.error(error.message);
 
-    if (taskToMove) {
+      const sourceColumn = columns.find((col) =>
+        col.tasks.some((task) => task._id === taskId)
+      );
+
+      const taskToMove = sourceColumn?.tasks.find(
+        (task) => task._id === taskId
+      );
+
       setColumns((prevColumns) =>
         prevColumns.map((col) => {
           if (col.status === sourceStatus) {
             return {
               ...col,
-              tasks: col.tasks.filter((task) => task._id !== taskId),
+              tasks: [...col.tasks, taskToMove],
             };
           }
           if (col.status === destStatus) {
             return {
               ...col,
-              tasks: [...col.tasks, { ...taskToMove, status: destStatus }],
+              tasks: col.tasks.filter((task) => task._id !== taskToMove._id),
             };
           }
           return col;
         })
       );
+    } finally {
+      dispatch(setTaskLoading(false));
     }
-  };
-
-  const updateTask = (status, updatedTask) => {
-    setColumns((prevColumns) =>
-      prevColumns.map((col) =>
-        col.status === status
-          ? {
-              ...col,
-              tasks: col.tasks.map((task) =>
-                task._id === updatedTask._id ? updatedTask : task
-              ),
-            }
-          : col
-      )
-    );
-  };
-
-  const renderTaskModal = () => {
-    if (!editingTask.status) return null;
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-        <div className="bg-white p-6 rounded-lg w-96">
-          <input
-            type="text"
-            placeholder="Task Title"
-            value={editingTask.task?.title || ""}
-            onChange={(e) =>
-              setEditingTask((prev) => ({
-                ...prev,
-                task: {
-                  ...(prev.task || { _id: "", title: "" }),
-                  title: e.target.value,
-                },
-              }))
-            }
-            className="w-full p-2 border rounded mb-4"
-          />
-          <textarea
-            placeholder="Task Description (Optional)"
-            value={editingTask.task?.description || ""}
-            onChange={(e) =>
-              setEditingTask((prev) => ({
-                ...prev,
-                task: {
-                  ...(prev.task || { _id: "", title: "" }),
-                  description: e.target.value,
-                },
-              }))
-            }
-            className="w-full p-2 border rounded mb-4 h-24"
-          />
-          <div className="flex justify-between">
-            <button
-              onClick={() => {
-                if (editingTask.task) {
-                  editingTask.task._id
-                    ? updateTask(editingTask.status, editingTask.task)
-                    : addTask(editingTask.status, {
-                        title: editingTask.task.title,
-                        description: editingTask.task.description,
-                        status: editingTask.status,
-                      });
-                }
-                setEditingTask({ status: "", task: undefined });
-              }}
-              className="bg-blue-500 text-white px-4 py-2 rounded"
-            >
-              {editingTask.task?._id ? "Update" : "Add"} Task
-            </button>
-            <button
-              onClick={() => setEditingTask({ status: "", task: undefined })}
-              className="bg-gray-300 text-black px-4 py-2 rounded"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -223,15 +228,23 @@ const Board = () => {
                           e.dataTransfer.setData("taskId", task._id)
                         }
                       >
+                        {isTaskLoading && currentTask._id === task._id && (
+                          <div className="absolute top-0 left-0 z-20 bg-white/20 h-full w-full backdrop-blur-md flex items-center justify-center">
+                            <Loader2
+                              size={50}
+                              className="text-primary animate-spin"
+                            />
+                          </div>
+                        )}
                         <div className="flex justify-between items-center">
                           <h3 className="font-bold text-xl line-clamp-1">
                             {task.title}
                           </h3>
                           <div className="flex space-x-2">
-                            {column.status !== "todo" && (
+                            {task.isClaimed && (
                               <div className="text-xs text-background bg-blue-500 rounded-full py-2 px-4">
                                 {" "}
-                                0x3323...342d{" "}
+                                {formatAddress(task.claimedBy)}{" "}
                               </div>
                             )}
                           </div>
@@ -243,15 +256,14 @@ const Board = () => {
                         )}
 
                         {column.status !== "paid" &&
-                          column.status !== "submitted" && (
+                          column.status !== "submitted" &&
+                          project?.owner === address && (
                             <div className="flex space-x-2 mt-3">
                               <button
-                                onClick={() =>
-                                  setEditingTask({
-                                    status: column.status,
-                                    task,
-                                  })
-                                }
+                                onClick={() => {
+                                  dispatch(setSelectedTask(task));
+                                  dispatch(toggleUpdateTaskModal());
+                                }}
                                 className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
                               >
                                 <Edit2
@@ -261,9 +273,10 @@ const Board = () => {
                                 <p>Edit</p>
                               </button>
                               <button
-                                onClick={() =>
-                                  deleteTask(column.status, task._id)
-                                }
+                                onClick={() => {
+                                  dispatch(setSelectedTask(task));
+                                  dispatch(toggleDeleteTaskModal());
+                                }}
                                 className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
                               >
                                 <Trash2
@@ -276,7 +289,7 @@ const Board = () => {
                           )}
 
                         {column.status === "submitted" && (
-                          <div className="flex space-x-2 mt-3">
+                          <div className="flex flex-wrap gap-2 mt-3">
                             <button
                               onClick={() => {}}
                               className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
@@ -284,29 +297,55 @@ const Board = () => {
                               <Send size={16} className="text-white size-3" />{" "}
                               <p>Approve and Pay</p>
                             </button>
+
+                            <button
+                              onClick={() => {
+                                dispatch(setSelectedTask(task));
+                                dispatch(toggleDeleteTaskModal());
+                              }}
+                              className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
+                            >
+                              <X size={16} className="text-white size-3" />{" "}
+                              <p>Reject</p>
+                            </button>
+
+                            <button
+                              onClick={() => {}}
+                              className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
+                            >
+                              <RefreshCcw
+                                size={16}
+                                className="text-white size-3"
+                              />{" "}
+                            </button>
                           </div>
                         )}
 
                         <div className="border border-primary my-3 opacity-30 w-full border-b-0 mx-auto" />
 
                         <div className="flex w-full justify-between">
-                          {column.status === "todo" && (
-                            <Button
-                              className="py-2 bg-background normal-case border border-primary rounded-full text-primary transition-colors duration-300"
-                              onClick={() => {}}
-                            >
-                              Claim Task
-                            </Button>
-                          )}
+                          {column.status === "todo" &&
+                            task?.isClaimed === false && (
+                              <Button
+                                className="py-2 bg-background normal-case border border-primary rounded-full text-primary transition-colors duration-300"
+                                onClick={() => {
+                                  claimTask(task._id);
+                                }}
+                              >
+                                Claim Task
+                              </Button>
+                            )}
 
-                          {column.status === "in-progress" && (
-                            <Button
-                              className="py-2 bg-blue-500 normal-case border border-primary rounded-full text-background transition-colors duration-300"
-                              onClick={() => {}}
-                            >
-                              Claimed
-                            </Button>
-                          )}
+                          {(column.status === "todo" ||
+                            column.status === "in-progress") &&
+                            task?.isClaimed === true && (
+                              <Button
+                                className="py-2 bg-blue-500 normal-case border border-primary rounded-full text-background transition-colors duration-300"
+                                onClick={() => {}}
+                              >
+                                Claimed
+                              </Button>
+                            )}
 
                           {column.status === "submitted" && (
                             <Button
@@ -351,7 +390,6 @@ const Board = () => {
             </div>
           ))}
         </div>
-        {renderTaskModal()}
       </div>
     </div>
   );

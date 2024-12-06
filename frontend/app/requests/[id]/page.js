@@ -1,39 +1,35 @@
 "use client";
 
 import ConnectWalletButton from "@/components/ui/ConnectWalletButton";
+import useBoard from "@/hooks/useBoard";
+import useUtils from "@/hooks/useUtils";
+import {
+  setSelectedTask,
+  toggleDeleteTaskModal,
+} from "@/redux/slice/modalSlice";
 import { Button } from "@material-tailwind/react";
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, RefreshCcw, Send, X } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { useAccount } from "wagmi";
 
 export default function Requests() {
   const router = useRouter();
   const { isConnected } = useAccount();
   const params = useParams();
+  const tasks = useSelector((state) => state.board.tasks);
+  const { loadTasksByProjectId } = useBoard();
+  const isTaskLoading = useSelector((state) => state.loading.taskLoading);
+  const currentTask = useSelector((state) => state.loading.currentTask);
+  const { formatAddress } = useUtils();
+  const dispatch = useDispatch();
 
-  const task = [
-    {
-      id: 1,
-      status: "todo",
-      title: "Task Axios",
-      description: "A task for Axios",
-      owner: "0x1234...7890",
-    },
-    {
-      id: 2,
-      status: "submitted",
-      title: "Task Axios",
-      description: "A task for Axios",
-      owner: "0x1234...7890",
-    },
-    {
-      id: 3,
-      status: "paid",
-      title: "Task Axios",
-      description: "A task for Axios",
-      owner: "0x1234...7890",
-    },
-  ];
+  useEffect(() => {
+    if (params.id) {
+      loadTasksByProjectId(params.id);
+    }
+  }, []);
 
   return (
     <div className="p-6 first-letter:bg-gray-100 h-screen overflow-y-hidden">
@@ -59,85 +55,92 @@ export default function Requests() {
         </div>
       </div>
       <div className="w-full border-primary border opacity-10 mb-6 border-b-0 "></div>
-      {isConnected && (
-        <div className="w-full flex flex-wrap gap-4">
-          {task.map((task) =>
-            task.status === "submitted" ? (
-              <div
-                key={task.id}
-                className="bg-white w-[24%] hover:shadow-lg hover:cursor-pointer border-black border p-3 rounded-xl shadow-sm flex flex-col overflow-hidden relative"
-              >
-                <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-xl line-clamp-1">
-                    {task.title}
-                  </h3>
-                  <div className="flex space-x-2">
-                    {task.id !== "todo" && (
-                      <div className="text-xs text-background bg-blue-500 rounded-full py-2 px-4">
-                        {" "}
-                        0x3323...342d{" "}
+
+      <div className="flex flex-col w-full gap-5">
+        {isConnected && (
+          <div className="w-full flex flex-wrap gap-4">
+            {tasks.map(
+              (task) =>
+                task?.status === "submitted" && (
+                  <div
+                    key={task._id}
+                    className="bg-gray-100 p-3 rounded-xl border border-primary shadow-sm flex flex-col w-full overflow-hidden relative"
+                  >
+                    {isTaskLoading && currentTask._id === task._id && (
+                      <div className="absolute top-0 left-0 z-20 bg-white/20 h-full w-full backdrop-blur-md flex items-center justify-center">
+                        <Loader2
+                          size={50}
+                          className="text-primary animate-spin"
+                        />
                       </div>
                     )}
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-bold text-xl line-clamp-1">
+                        {task.title}
+                      </h3>
+                      <div className="flex space-x-2">
+                        {task.isClaimed && (
+                          <div className="text-xs text-background bg-blue-500 rounded-full py-2 px-4">
+                            {" "}
+                            {formatAddress(task.claimedBy)}{" "}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {task.description && (
+                      <p className="text-sm text-gray-600 text-left mt-3 line-clamp-3">
+                        {task.description}
+                      </p>
+                    )}
+
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <button
+                        onClick={() => {}}
+                        className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
+                      >
+                        <Send size={16} className="text-white size-3" />{" "}
+                        <p>Approve and Pay</p>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          dispatch(setSelectedTask(task));
+                          dispatch(toggleDeleteTaskModal());
+                        }}
+                        className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
+                      >
+                        <X size={16} className="text-white size-3" />{" "}
+                        <p>Reject</p>
+                      </button>
+
+                      <button
+                        onClick={() => {}}
+                        className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
+                      >
+                        <RefreshCcw size={16} className="text-white size-3" />{" "}
+                      </button>
+                    </div>
+
+                    <div className="border border-primary my-3 opacity-30 w-full border-b-0 mx-auto" />
+
+                    <div className="flex w-full justify-between">
+                      <Button
+                        className="py-2 bg-orange-500 normal-case border border-primary rounded-full text-primary transition-colors duration-300"
+                        onClick={() => {}}
+                      >
+                        Verifying
+                      </Button>
+
+                      <div className="bg-primary h-9 text-background flex items-center justify-center rounded-full text-xs opacity-70 px-3">
+                        {task.bountyAmount} USDC
+                      </div>
+                    </div>
                   </div>
-                </div>
-                {task.description && (
-                  <p className="text-sm text-gray-600 text-left mt-3 line-clamp-3">
-                    {task.description}
-                  </p>
-                )}
-
-                {task.status === "submitted" && (
-                  <div className="flex space-x-2 mt-3">
-                    <button
-                      onClick={() => {}}
-                      className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
-                    >
-                      <Send size={16} className="text-white size-3" />{" "}
-                      <p>Approve and Pay</p>
-                    </button>
-                  </div>
-                )}
-
-                <div className="border border-primary my-3 opacity-30 w-full border-b-0 mx-auto" />
-
-                <div className="flex w-full justify-between">
-                  {task.status === "todo" && (
-                    <Button
-                      className="py-2 bg-background normal-case border border-primary rounded-full text-primary transition-colors duration-300"
-                      onClick={() => {}}
-                    >
-                      Claim Task
-                    </Button>
-                  )}
-
-                  {task.status === "submitted" && (
-                    <Button
-                      className="py-2 bg-orange-500 normal-case border border-primary rounded-full text-primary transition-colors duration-300"
-                      onClick={() => {}}
-                    >
-                      Verifying
-                    </Button>
-                  )}
-
-                  {task.status === "paid" && (
-                    <Button
-                      className="py-2 bg-green-500 normal-case border border-primary rounded-full text-background transition-colors duration-300"
-                      onClick={() => {}}
-                    >
-                      Paid
-                    </Button>
-                  )}
-
-                  <div className="bg-primary h-9 text-background flex items-center justify-center rounded-full text-xs opacity-70 px-3">
-                    2 ETH
-                  </div>
-                </div>
-              </div>
-            ) : null
-          )}
-        </div>
-      )}
-      z
+                )
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

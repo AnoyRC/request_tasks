@@ -5,12 +5,7 @@ const boardSlice = createSlice({
 
   initialState: {
     project: null,
-    tasks: [
-      { id: "todo", title: "To Do", tasks: [], color: "red", canCreate: true },
-      { id: "in-progress", title: "In Progress", tasks: [], color: "blue" },
-      { id: "submitted", title: "Submitted", tasks: [], color: "orange" },
-      { id: "paid", title: "Paid", tasks: [], color: "green" },
-    ],
+    tasks: [],
   },
 
   reducers: {
