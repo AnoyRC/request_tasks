@@ -9,6 +9,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@requestnetwork/request-client.js": "^0.52.0",
     "convex": "^1.17.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

@@ -35,6 +35,8 @@ const Board = () => {
     claimTask,
     changeTaskStatusToInProgress,
     changeStatusToSubmitted,
+    approveAndPay,
+    checkForCompletedTask,
   } = useBoard();
   const tasks = useSelector((state) => state.board.tasks);
   const { address } = useAccount();
@@ -122,6 +124,11 @@ const Board = () => {
         return;
       }
 
+      if (sourceStatus === "paid") {
+        toast.error("Task can't be moved from paid status");
+        return;
+      }
+
       if (taskToMove) {
         setColumns((prevColumns) =>
           prevColumns.map((col) => {
@@ -147,7 +154,7 @@ const Board = () => {
       }
 
       if (sourceStatus === "in-progress" && destStatus === "submitted") {
-        await changeStatusToSubmitted(taskId, sourceStatus, destStatus);
+        await changeStatusToSubmitted(taskToMove, sourceStatus, destStatus);
       }
     } catch (error) {
       console.log(error);
@@ -184,15 +191,18 @@ const Board = () => {
   };
 
   return (
-    <div className="p-6 first-letter:bg-gray-100 h-screen overflow-y-hidden">
+    <div className="p-6 first-letter:bg-gray-100 flex flex-col h-screen overflow-y-hidden">
       <ProjectHeader />
 
       <div className="w-full border-primary border opacity-10 mb-6 border-b-0 "></div>
 
       <div className="flex-1 min-w-[950px] overflow-x-auto hide-scroll">
-        <div className="flex w-full space-x-4">
+        <div className="flex w-full space-x-4 h-full">
           {columns.map((column) => (
-            <div key={column.status} className="flex-1 rounded-lg w-[25%]">
+            <div
+              key={column.status}
+              className="flex-1 rounded-lg flex flex-col w-[25%]"
+            >
               <div className="flex justify-between items-center mb-4">
                 <div className="flex gap-3 items-center">
                   <div
@@ -288,38 +298,50 @@ const Board = () => {
                             </div>
                           )}
 
-                        {column.status === "submitted" && (
-                          <div className="flex flex-wrap gap-2 mt-3">
-                            <button
-                              onClick={() => {}}
-                              className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
-                            >
-                              <Send size={16} className="text-white size-3" />{" "}
-                              <p>Approve and Pay</p>
-                            </button>
+                        {column.status === "submitted" &&
+                          address === project?.owner && (
+                            <div className="flex flex-wrap gap-2 mt-3">
+                              <button
+                                onClick={() => {
+                                  if (address !== project?.owner) {
+                                    toast.error(
+                                      "You can't approve and pay a task you didn't create"
+                                    );
+                                    return;
+                                  }
 
-                            <button
-                              onClick={() => {
-                                dispatch(setSelectedTask(task));
-                                dispatch(toggleDeleteTaskModal());
-                              }}
-                              className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
-                            >
-                              <X size={16} className="text-white size-3" />{" "}
-                              <p>Reject</p>
-                            </button>
+                                  approveAndPay(task);
+                                }}
+                                className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
+                              >
+                                <Send size={16} className="text-white size-3" />{" "}
+                                <p>Approve and Pay</p>
+                              </button>
 
-                            <button
-                              onClick={() => {}}
-                              className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
-                            >
-                              <RefreshCcw
-                                size={16}
-                                className="text-white size-3"
-                              />{" "}
-                            </button>
-                          </div>
-                        )}
+                              <button
+                                onClick={() => {
+                                  dispatch(setSelectedTask(task));
+                                  dispatch(toggleDeleteTaskModal());
+                                }}
+                                className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
+                              >
+                                <X size={16} className="text-white size-3" />{" "}
+                                <p>Reject</p>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  checkForCompletedTask(task);
+                                }}
+                                className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
+                              >
+                                <RefreshCcw
+                                  size={16}
+                                  className="text-white size-3"
+                                />{" "}
+                              </button>
+                            </div>
+                          )}
 
                         <div className="border border-primary my-3 opacity-30 w-full border-b-0 mx-auto" />
 
@@ -374,7 +396,7 @@ const Board = () => {
                 )}
               </div>
               <div
-                className="h-full min-h-[100px]"
+                className="flex-1 min-h-[100px]"
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   const taskId = e.dataTransfer.getData("taskId");

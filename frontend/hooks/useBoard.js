@@ -15,13 +15,31 @@ import { sepolia } from "viem/chains";
 import { useAccount } from "wagmi";
 import { useSwitchChain } from "wagmi";
 import { ethers } from "ethers";
+import { Web3SignatureProvider } from "@requestnetwork/web3-signature";
+import {
+  RequestNetwork,
+  Types,
+  Utils,
+} from "@requestnetwork/request-client.js";
+import { useWalletClient } from "wagmi";
+import { useEthersProvider } from "@/utils/ethersProvider";
+import {
+  approveErc20,
+  hasErc20Approval,
+  hasSufficientFunds,
+  payRequest,
+} from "@requestnetwork/payment-processor";
 
 export default function useBoard() {
   const dispatch = useDispatch();
   const { isConnected, chainId } = useAccount();
   const signer = useEthersSigner();
+  const provider = useEthersProvider({
+    chainId: sepolia.id,
+  });
   const { switchChainAsync } = useSwitchChain();
   const project = useSelector((state) => state.board.project);
+  const { data: walletClient } = useWalletClient();
 
   const fetchProject = async (_id) => {
     try {
@@ -360,17 +378,104 @@ export default function useBoard() {
     }
   };
 
-  const changeStatusToSubmitted = async (id, sourceStatus, destStatus) => {
-    // requestID is hardcoded to 0x0
-    const requestId = "0x0";
+  const changeStatusToSubmitted = async (task, sourceStatus, destStatus) => {
+    if (!isConnected) {
+      toast.error("You need to connect your wallet first");
+      throw new Error("You need to connect your wallet first");
+    }
+
+    if (chainId !== 11155111) {
+      toast.error("Invalid network");
+      await switchChainAsync({
+        chainId: sepolia.id,
+      });
+    }
+
+    const web3SignatureProvider = new Web3SignatureProvider(walletClient);
+
+    const requestClient = new RequestNetwork({
+      nodeConnectionConfig: {
+        baseURL: "https://sepolia.gateway.request.network/",
+      },
+      signatureProvider: web3SignatureProvider,
+    });
+
+    const payeeIdentity = signer._address;
+    const payerIdentity = project.owner;
+    const paymentRecipient = payeeIdentity;
+    const feeRecipient = ethers.constants.AddressZero;
+
+    const requestCreateParameters = {
+      requestInfo: {
+        // The currency in which the request is denominated
+        currency: {
+          type: Types.RequestLogic.CURRENCY.ERC20,
+          value: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+          network: "sepolia",
+        },
+
+        // The expected amount as a string, in parsed units, respecting `decimals`
+        // Consider using `parseUnits()` from ethers or viem
+        expectedAmount: (Number(task.bountyAmount) * 10 ** 6).toFixed(0),
+
+        // The payee identity. Not necessarily the same as the payment recipient.
+        payee: {
+          type: Types.Identity.TYPE.ETHEREUM_ADDRESS,
+          value: payeeIdentity,
+        },
+
+        // The payer identity. If omitted, any identity can pay the request.
+        payer: {
+          type: Types.Identity.TYPE.ETHEREUM_ADDRESS,
+          value: payerIdentity,
+        },
+
+        // The request creation timestamp.
+        timestamp: Utils.getCurrentTimestampInSecond(),
+      },
+
+      // The paymentNetwork is the method of payment and related details.
+      paymentNetwork: {
+        id: Types.Extension.PAYMENT_NETWORK_ID.ERC20_FEE_PROXY_CONTRACT,
+        parameters: {
+          paymentNetworkName: "sepolia",
+          paymentAddress: payeeIdentity,
+          feeAddress: feeRecipient,
+          feeAmount: "0",
+        },
+      },
+
+      // The contentData can contain anything.
+      // Consider using rnf_invoice format from @requestnetwork/data-format
+      contentData: {
+        taskId: task._id,
+        projectId: project._id,
+        payer: payerIdentity,
+        payee: payeeIdentity,
+      },
+
+      // The identity that signs the request, either payee or payer identity.
+      signer: {
+        type: Types.Identity.TYPE.ETHEREUM_ADDRESS,
+        value: payeeIdentity,
+      },
+    };
+
+    const request = await requestClient.createRequest(requestCreateParameters);
+
+    const confirmedRequestData = await request.waitForConfirmation();
+
+    if (!confirmedRequestData) {
+      throw new Error("Request not confirmed");
+    }
 
     const response = await axios.post(
       process.env.NEXT_PUBLIC_API_URL + "/tasks/change-status",
       {
-        id,
+        id: task._id,
         sourceStatus,
         destStatus,
-        requestId,
+        requestId: confirmedRequestData.requestId,
       }
     );
 
@@ -379,6 +484,94 @@ export default function useBoard() {
       toast.success("Task status changed to Submitted");
     } else {
       throw new Error(response.data.message);
+    }
+  };
+
+  const approveAndPay = async (task) => {
+    try {
+      dispatch(setloading(true));
+      if (!isConnected) {
+        toast.error("You need to connect your wallet first");
+        return;
+      }
+
+      if (chainId !== 11155111) {
+        toast.error("Invalid network");
+        await switchChainAsync({
+          chainId: sepolia.id,
+        });
+      }
+
+      if (task.status !== "submitted") {
+        toast.error("Invalid task status");
+        return;
+      }
+
+      const requestClient = new RequestNetwork({
+        nodeConnectionConfig: {
+          baseURL: "https://sepolia.gateway.request.network/",
+        },
+      });
+
+      const request = await requestClient.fromRequestId(task?.requestId);
+      let requestData = request.getData();
+
+      const _hasSufficientFunds = await hasSufficientFunds({
+        request: requestData,
+        address: requestData.payer.value,
+        providerOptions: {
+          provider: provider,
+        },
+      });
+
+      if (!_hasSufficientFunds) {
+        toast.error("Insufficient funds");
+        return;
+      }
+
+      const _hasErc20Approval = await hasErc20Approval(
+        requestData,
+        requestData.payer.value,
+        signer
+      );
+
+      if (!_hasErc20Approval) {
+        const approvalTx = await approveErc20(requestData, signer);
+        await approvalTx.wait(2);
+      }
+
+      const paymentTx = await payRequest(requestData, signer);
+      await paymentTx.wait(2);
+
+      while (requestData.balance?.balance < requestData.expectedAmount) {
+        requestData = await request.refresh();
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+
+      await checkForCompletedTask(task);
+    } catch (error) {
+      console.log(error);
+      toast.error(error.message);
+    } finally {
+      dispatch(setloading(false));
+    }
+  };
+
+  const checkForCompletedTask = async (task) => {
+    try {
+      const response = await axios.get(
+        process.env.NEXT_PUBLIC_API_URL + "/tasks/check/" + task.requestId
+      );
+
+      if (response.data.success) {
+        await loadTasksByProjectId(project._id);
+        toast.success("Payment successful");
+      } else {
+        toast.error(response.data.message);
+      }
+    } catch (error) {
+      console.log(error);
+      toast.error(error.message);
     }
   };
 
@@ -391,5 +584,7 @@ export default function useBoard() {
     claimTask,
     changeTaskStatusToInProgress,
     changeStatusToSubmitted,
+    approveAndPay,
+    checkForCompletedTask,
   };
 }

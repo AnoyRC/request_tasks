@@ -1,6 +1,6 @@
 import { providers } from "ethers";
 import { useMemo } from "react";
-import { Config, useClient } from "wagmi";
+import { useClient } from "wagmi";
 
 export function clientToProvider(client) {
   const { chain, transport } = client;
@@ -20,7 +20,7 @@ export function clientToProvider(client) {
 
 /** Hook to convert a viem Client to an ethers.js Provider. */
 export function useEthersProvider({ chainId } = {}) {
-  const client = useClient < Config > { chainId };
+  const client = useClient({ chainId });
   return useMemo(() => (client ? clientToProvider(client) : undefined), [
     client,
   ]);

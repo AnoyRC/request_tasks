@@ -6,6 +6,7 @@ import {
   deleteTask,
   claimTask,
   changeTaskStatus,
+  checkForCompletedTask,
 } from "../controllers/taskController.js";
 const router = express.Router();
 
@@ -20,5 +21,7 @@ router.post("/delete", deleteTask);
 router.post("/claim", claimTask);
 
 router.post("/change-status", changeTaskStatus);
+
+router.get("/check/:id", checkForCompletedTask);
 
 export default router;

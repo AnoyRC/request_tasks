@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../convex/_generated/api.js";
+import { RequestNetwork } from "@requestnetwork/request-client.js";
 
 export const createTask = async (req, res) => {
   try {
@@ -503,9 +504,22 @@ export const changeTaskStatus = async (req, res) => {
       const client = new ConvexHttpClient(process.env.CONVEX_URL);
 
       // Verify the Request ID
+      const requestClient = new RequestNetwork({
+        nodeConnectionConfig: {
+          baseURL: "https://sepolia.gateway.request.network/",
+        },
+      });
+
+      const request = await requestClient.fromRequestId(requestId);
+
+      const requestData = request.getData();
 
       const task = await client.query(api.task.getTask, {
         id,
+      });
+
+      const project = await client.query(api.project.getProject, {
+        id: task.projectId,
       });
 
       if (!task) {
@@ -519,6 +533,45 @@ export const changeTaskStatus = async (req, res) => {
         return res.json({
           success: false,
           message: "Invalid task status",
+        });
+      }
+
+      if (!requestData) {
+        return res.json({
+          success: false,
+          message: "Request not found",
+        });
+      }
+
+      if (requestData?.contentData.taskId !== id) {
+        return res.json({
+          success: false,
+          message: "Invalid request",
+        });
+      }
+
+      if (requestData?.contentData.projectId !== project._id) {
+        return res.json({
+          success: false,
+          message: "Invalid request",
+        });
+      }
+
+      if (
+        requestData?.payer.value.toLowerCase() !== project.owner.toLowerCase()
+      ) {
+        return res.json({
+          success: false,
+          message: "Invalid payee",
+        });
+      }
+
+      if (
+        requestData?.payee.value.toLowerCase() !== task.claimedBy.toLowerCase()
+      ) {
+        return res.json({
+          success: false,
+          message: "Invalid payee",
         });
       }
 
@@ -538,6 +591,80 @@ export const changeTaskStatus = async (req, res) => {
       });
     }
   } catch (error) {
+    res.json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const checkForCompletedTask = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.json({
+        success: false,
+        message: "Missing required fields",
+      });
+    }
+
+    const requestClient = new RequestNetwork({
+      nodeConnectionConfig: {
+        baseURL: "https://sepolia.gateway.request.network/",
+      },
+    });
+
+    const request = await requestClient.fromRequestId(id);
+
+    const requestData = request.getData();
+
+    if (!requestData) {
+      return res.json({
+        success: false,
+        message: "Request not found",
+      });
+    }
+
+    const taskId = requestData.contentData.taskId;
+
+    const client = new ConvexHttpClient(process.env.CONVEX_URL);
+
+    const task = await client.query(api.task.getTask, {
+      id: taskId,
+    });
+
+    if (!task) {
+      return res.json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
+    if (task.status !== "submitted") {
+      return res.json({
+        success: false,
+        message: "Task not submitted",
+      });
+    }
+
+    if (requestData.balance?.balance < requestData.expectedAmount) {
+      return res.json({
+        success: false,
+        message: "Payment not completed",
+      });
+    }
+
+    await client.mutation(api.task.changeStatusToPaid, {
+      taskId,
+    });
+
+    res.json({
+      success: true,
+      message: "Task status changed to paid",
+    });
+  } catch (error) {
+    console.log(error);
     res.json({
       success: false,
       message: error.message,

@@ -5,6 +5,7 @@ import WagmiProvider from "@/providers/WagmiProvider";
 import { Toaster } from "sonner";
 import ConnectWalletModal from "@/components/modal/ConnectWalletModal";
 import LoadingModal from "@/components/modal/LoadingModal";
+import BackgroundAnimation from "@/components/ui/BackgroundAnimation";
 
 const lato = Lato({
   weight: ["100", "300", "400", "700", "900"],
@@ -45,6 +46,7 @@ export default function RootLayout({ children }) {
             <LoadingModal />
             <ConnectWalletModal />
             {children}
+            <BackgroundAnimation />
           </WagmiProvider>
         </ReduxProvider>
       </body>
