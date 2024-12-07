@@ -1,12 +1,18 @@
 "use client";
 
 import React, { useState } from "react";
-import { FolderGit2, GitPullRequest, PowerIcon } from "lucide-react";
+import {
+  FolderGit2,
+  GitPullRequest,
+  PowerIcon,
+  RefreshCcw,
+} from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { useDispatch } from "react-redux";
 import { toggleConnectModal } from "@/redux/slice/modalSlice";
 import useUtils from "@/hooks/useUtils";
+import useBoard from "@/hooks/useBoard";
 
 const Sidebar = ({}) => {
   const params = useParams();
@@ -20,6 +26,7 @@ const Sidebar = ({}) => {
   const { disconnect } = useDisconnect();
   const dispatch = useDispatch();
   const { formatAddress } = useUtils();
+  const { loadTasksByProjectId } = useBoard();
 
   const router = useRouter();
 
@@ -60,6 +67,26 @@ const Sidebar = ({}) => {
           </span>
         </div>
       ))}
+
+      <div
+        onClick={() => {
+          loadTasksByProjectId(params.id);
+        }}
+        className={`
+            relative flex items-center p-2 w-full rounded-lg px-[10px] cursor-pointer transition-all duration-300
+            hover:bg-gray-800
+          `}
+      >
+        <RefreshCcw size={24} className="text-gray-400" />
+        <span
+          className={`
+            absolute left-10 text-white px-2 py-1 rounded
+            opacity-0 group-hover:opacity-100 transition-opacity duration-300
+          `}
+        >
+          Refresh
+        </span>
+      </div>
       <div className="w-full flex-col flex flex-1 justify-end">
         {isConnected && (
           <div className="w-full flex flex-col gap-2">

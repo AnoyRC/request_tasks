@@ -3,15 +3,17 @@
 import ConnectWalletButton from "@/components/ui/ConnectWalletButton";
 import useBoard from "@/hooks/useBoard";
 import useUtils from "@/hooks/useUtils";
+import { addBatchTask, removeBatchTask } from "@/redux/slice/boardSlice";
 import {
   setSelectedTask,
   toggleDeleteTaskModal,
 } from "@/redux/slice/modalSlice";
-import { Button } from "@material-tailwind/react";
+import { Button, Checkbox } from "@material-tailwind/react";
 import { ArrowLeft, RefreshCcw, Send, X } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { toast } from "sonner";
 import { useAccount } from "wagmi";
 
 export default function Requests() {
@@ -19,14 +21,26 @@ export default function Requests() {
   const { isConnected } = useAccount();
   const params = useParams();
   const tasks = useSelector((state) => state.board.tasks);
-  const { loadTasksByProjectId } = useBoard();
+  const {
+    loadTasksByProjectId,
+    approveAndPay,
+    checkForCompletedTask,
+    batchApproveAndPay,
+    fetchProject,
+  } = useBoard();
   const isTaskLoading = useSelector((state) => state.loading.taskLoading);
   const currentTask = useSelector((state) => state.loading.currentTask);
   const { formatAddress } = useUtils();
   const dispatch = useDispatch();
+  const project = useSelector((state) => state.board.project);
+  const { address } = useAccount();
+  const batchTasks = useSelector((state) => state.board.batchTasks);
+  const isMultipleSubmittedTasks =
+    tasks.filter((task) => task.status === "submitted").length > 1;
 
   useEffect(() => {
     if (params.id) {
+      fetchProject(params.id);
       loadTasksByProjectId(params.id);
     }
   }, []);
@@ -60,81 +74,118 @@ export default function Requests() {
           {tasks.map(
             (task) =>
               task?.status === "submitted" && (
-                <div
-                  key={task._id}
-                  className="bg-gray-100 p-3 rounded-xl border border-primary shadow-sm flex flex-col w-full overflow-hidden relative"
-                >
-                  {isTaskLoading && currentTask._id === task._id && (
-                    <div className="absolute top-0 left-0 z-20 bg-white/20 h-full w-full backdrop-blur-md flex items-center justify-center">
-                      <Loader2
-                        size={50}
-                        className="text-primary animate-spin"
-                      />
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-xl line-clamp-1">
-                      {task.title}
-                    </h3>
-                    <div className="flex space-x-2">
-                      {task.isClaimed && (
-                        <div className="text-xs text-background bg-blue-500 rounded-full py-2 px-4">
-                          {" "}
-                          {formatAddress(task.claimedBy)}{" "}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {task.description && (
-                    <p className="text-sm text-gray-600 text-left mt-3 line-clamp-3">
-                      {task.description}
-                    </p>
-                  )}
-
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    <button
-                      onClick={() => {}}
-                      className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
-                    >
-                      <Send size={16} className="text-white size-3" />{" "}
-                      <p>Approve and Pay</p>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        dispatch(setSelectedTask(task));
-                        dispatch(toggleDeleteTaskModal());
+                <div key={task._id} className="flex w-full gap-2">
+                  {isMultipleSubmittedTasks && address === project?.owner && (
+                    <Checkbox
+                      color="primary"
+                      checked={batchTasks.includes(task)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          dispatch(addBatchTask(task));
+                        } else {
+                          dispatch(removeBatchTask(task._id));
+                        }
                       }}
-                      className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
-                    >
-                      <X size={16} className="text-white size-3" />{" "}
-                      <p>Reject</p>
-                    </button>
+                    />
+                  )}
+                  <div className="flex-1 bg-gray-100 p-3 rounded-xl border border-primary shadow-sm flex flex-col w-full overflow-hidden relative">
+                    {isTaskLoading && currentTask._id === task._id && (
+                      <div className="absolute top-0 left-0 z-20 bg-white/20 h-full w-full backdrop-blur-md flex items-center justify-center">
+                        <Loader2
+                          size={50}
+                          className="text-primary animate-spin"
+                        />
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-bold text-xl line-clamp-1">
+                        {task.title}
+                      </h3>
+                      <div className="flex space-x-2">
+                        {task.isClaimed && (
+                          <div className="text-xs text-background bg-blue-500 rounded-full py-2 px-4">
+                            {" "}
+                            {formatAddress(task.claimedBy)}{" "}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {task.description && (
+                      <p className="text-sm text-gray-600 text-left mt-3 line-clamp-3">
+                        {task.description}
+                      </p>
+                    )}
 
-                    <button
-                      onClick={() => {}}
-                      className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
-                    >
-                      <RefreshCcw size={16} className="text-white size-3" />{" "}
-                    </button>
-                  </div>
+                    {address === project?.owner && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <button
+                          onClick={() => {
+                            if (address !== project?.owner) {
+                              toast.error(
+                                "You can't approve and pay a task you didn't create"
+                              );
+                              return;
+                            }
 
-                  <div className="border border-primary my-3 opacity-30 w-full border-b-0 mx-auto" />
+                            approveAndPay(task);
+                          }}
+                          className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
+                        >
+                          <Send size={16} className="text-white size-3" />{" "}
+                          <p>Approve and Pay</p>
+                        </button>
 
-                  <div className="flex w-full justify-between">
-                    <Button
-                      className="py-2 bg-orange-500 normal-case border border-primary rounded-full text-primary transition-colors duration-300"
-                      onClick={() => {}}
-                    >
-                      Verifying
-                    </Button>
+                        <button
+                          onClick={() => {
+                            dispatch(setSelectedTask(task));
+                            dispatch(toggleDeleteTaskModal());
+                          }}
+                          className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
+                        >
+                          <X size={16} className="text-white size-3" />{" "}
+                          <p>Reject</p>
+                        </button>
 
-                    <div className="bg-primary h-9 text-background flex items-center justify-center rounded-full text-xs opacity-70 px-3">
-                      {task.bountyAmount} USDC
+                        <button
+                          onClick={() => {
+                            checkForCompletedTask(task);
+                          }}
+                          className="flex items-center bg-primary opacity-70 space-x-2 text-background font-bold py-4 px-5 rounded-full text-xs h-3 justify-center"
+                        >
+                          <RefreshCcw size={16} className="text-white size-3" />{" "}
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="border border-primary my-3 opacity-30 w-full border-b-0 mx-auto" />
+
+                    <div className="flex w-full justify-between">
+                      <Button
+                        className="py-2 bg-orange-500 normal-case border border-primary rounded-full text-primary transition-colors duration-300"
+                        onClick={() => {}}
+                      >
+                        Verifying
+                      </Button>
+
+                      <div className="bg-primary h-9 text-background flex items-center justify-center rounded-full text-xs opacity-70 px-3">
+                        {task.bountyAmount} USDC
+                      </div>
                     </div>
                   </div>
                 </div>
               )
+          )}
+          {batchTasks.length > 1 && address === project?.owner && (
+            <div className="w-full flex justify-end">
+              <Button
+                className="bg-primary border normal-case opacity-70 border-secondary rounded-full text-background flex items-center justify-center hover:bg-background hover:text-primary hover:border-primary transition-colors duration-300"
+                onClick={() => {
+                  batchApproveAndPay(batchTasks);
+                }}
+              >
+                Batch Approve & Pay
+              </Button>
+            </div>
           )}
         </div>
       </div>

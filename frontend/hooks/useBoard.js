@@ -1,6 +1,6 @@
 "use client";
 
-import { setProject, setTasks } from "@/redux/slice/boardSlice";
+import { setBatchTasks, setProject, setTasks } from "@/redux/slice/boardSlice";
 import { setloading } from "@/redux/slice/loadingSlice";
 import {
   toggleCreateTaskModal,
@@ -23,11 +23,13 @@ import {
 } from "@requestnetwork/request-client.js";
 import { useWalletClient } from "wagmi";
 import { useEthersProvider } from "@/utils/ethersProvider";
+import { CurrencyManager } from "@requestnetwork/currency";
 import {
   approveErc20,
   hasErc20Approval,
   hasSufficientFunds,
   payRequest,
+  payBatchConversionProxyRequest,
 } from "@requestnetwork/payment-processor";
 
 export default function useBoard() {
@@ -549,6 +551,7 @@ export default function useBoard() {
       }
 
       await checkForCompletedTask(task);
+      dispatch(setBatchTasks([]));
     } catch (error) {
       console.log(error);
       toast.error(error.message);
@@ -566,12 +569,120 @@ export default function useBoard() {
       if (response.data.success) {
         await loadTasksByProjectId(project._id);
         toast.success("Payment successful");
+        dispatch(setBatchTasks([]));
       } else {
         toast.error(response.data.message);
       }
     } catch (error) {
       console.log(error);
       toast.error(error.message);
+    }
+  };
+
+  const batchApproveAndPay = async (tasks) => {
+    try {
+      dispatch(setloading(true));
+
+      if (!isConnected) {
+        toast.error("You need to connect your wallet first");
+        return;
+      }
+
+      if (chainId !== 11155111) {
+        toast.error("Invalid network");
+        await switchChainAsync({
+          chainId: sepolia.id,
+        });
+      }
+
+      const requestClient = new RequestNetwork({
+        nodeConnectionConfig: {
+          baseURL: "https://sepolia.gateway.request.network/",
+        },
+      });
+
+      const currencyManager = CurrencyManager.getDefault();
+
+      const enrichedRequests = await Promise.all(
+        tasks.map(async (task) => {
+          const request = await requestClient.fromRequestId(task.requestId);
+          const requestData = await request.refresh();
+
+          return {
+            request: requestData,
+            paymentSettings: {
+              maxToSpend: requestData.expectedAmount,
+              currencyManager: currencyManager,
+            },
+            paymentNetworkId: requestData.extensionsData[0].id,
+          };
+        })
+      );
+
+      const USDCToken = new ethers.Contract(
+        "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+        [
+          "function approve(address spender, uint256 amount) external returns (bool)",
+          "function allowance(address owner, address spender) external view returns (uint256)",
+        ],
+        signer
+      );
+
+      const hasErc20Approval = await USDCToken.allowance(
+        signer._address,
+        "0x67818703c92580c0e106e401F253E8A410A66f8B"
+      );
+
+      if (hasErc20Approval < 100) {
+        const approvalTx = USDCToken.interface.encodeFunctionData("approve", [
+          "0x67818703c92580c0e106e401F253E8A410A66f8B",
+          ethers.constants.MaxUint256,
+        ]);
+
+        const tx = await signer.sendTransaction({
+          to: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+          data: approvalTx,
+        });
+
+        await tx.wait(2);
+      }
+
+      const tx = await payBatchConversionProxyRequest(
+        enrichedRequests,
+        signer,
+        {
+          skipFeeUSDLimit: true,
+          conversion: {
+            currencyManager: currencyManager,
+          },
+          version: "0.1.0",
+        }
+      );
+
+      await tx.wait(2);
+
+      await Promise.all(
+        tasks.map(async (task) => {
+          while (true) {
+            const request = await requestClient.fromRequestId(task.requestId);
+            const requestData = await request.refresh();
+
+            if (requestData.balance?.balance >= requestData.expectedAmount) {
+              await checkForCompletedTask(task);
+              break;
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+        })
+      );
+
+      dispatch(setBatchTasks([]));
+    } catch (error) {
+      console.log(error);
+      toast.error(error.message);
+    } finally {
+      dispatch(setloading(false));
     }
   };
 
@@ -586,5 +697,6 @@ export default function useBoard() {
     changeStatusToSubmitted,
     approveAndPay,
     checkForCompletedTask,
+    batchApproveAndPay,
   };
 }

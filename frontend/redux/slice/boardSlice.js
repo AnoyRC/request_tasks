@@ -6,6 +6,7 @@ const boardSlice = createSlice({
   initialState: {
     project: null,
     tasks: [],
+    batchTasks: [],
   },
 
   reducers: {
@@ -26,9 +27,30 @@ const boardSlice = createSlice({
         }
       });
     },
+
+    setBatchTasks: (state, action) => {
+      state.batchTasks = action.payload;
+    },
+
+    addBatchTask: (state, action) => {
+      state.batchTasks.push(action.payload);
+    },
+
+    removeBatchTask: (state, action) => {
+      state.batchTasks = state.batchTasks.filter(
+        (task) => task._id !== action.payload
+      );
+    },
   },
 });
 
-export const { setProject, setTasks, editTask } = boardSlice.actions;
+export const {
+  setProject,
+  setTasks,
+  editTask,
+  setBatchTasks,
+  addBatchTask,
+  removeBatchTask,
+} = boardSlice.actions;
 
 export default boardSlice.reducer;

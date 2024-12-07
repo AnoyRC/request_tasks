@@ -99,6 +99,12 @@ export default function CreateTaskModal() {
                 toast.error("Please fill all fields");
                 return;
               }
+
+              if (Number(bountyAmount) === 0) {
+                toast.error("Bounty amount cannot be 0");
+                return;
+              }
+
               createTask(params.id, title, description, bountyAmount);
             }}
             loading={isLoading}

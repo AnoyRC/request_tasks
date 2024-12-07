@@ -220,7 +220,15 @@ const Board = () => {
               <div className="flex flex-col bg-secondary w-full p-3 rounded-xl gap-3">
                 {column.canCreate && (
                   <Button
-                    onClick={() => dispatch(toggleCreateTaskModal())}
+                    onClick={() => {
+                      if (address !== project?.owner) {
+                        toast.error(
+                          "You can't create a task for a project you didn't create"
+                        );
+                        return;
+                      }
+                      dispatch(toggleCreateTaskModal());
+                    }}
                     className="bg-background text-sm font-normal text-primary normal-case flex items-center justify-center gap-2 rounded-lg"
                   >
                     <Plus className="text-blue-700 w-4" />{" "}
