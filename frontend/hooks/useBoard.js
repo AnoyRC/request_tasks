@@ -30,6 +30,7 @@ import {
   hasSufficientFunds,
   payRequest,
   payBatchConversionProxyRequest,
+  approveErc20BatchConversionIfNeeded,
 } from "@requestnetwork/payment-processor";
 
 export default function useBoard() {
@@ -611,41 +612,33 @@ export default function useBoard() {
           return {
             request: requestData,
             paymentSettings: {
-              maxToSpend: requestData.expectedAmount,
-              currencyManager: currencyManager,
+              currency: {
+                type: Types.RequestLogic.CURRENCY.ERC20,
+                value: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+                network: "sepolia",
+              },
             },
-            paymentNetworkId: requestData.extensionsData[0].id,
+            paymentNetworkId:
+              Types.Extension.PAYMENT_NETWORK_ID.ERC20_FEE_PROXY_CONTRACT,
           };
         })
       );
 
-      const USDCToken = new ethers.Contract(
-        "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
-        [
-          "function approve(address spender, uint256 amount) external returns (bool)",
-          "function allowance(address owner, address spender) external view returns (uint256)",
-        ],
-        signer
-      );
-
-      const hasErc20Approval = await USDCToken.allowance(
+      await approveErc20BatchConversionIfNeeded(
+        enrichedRequests[0].request,
         signer._address,
-        "0x67818703c92580c0e106e401F253E8A410A66f8B"
+        signer,
+        undefined,
+        {
+          currency: {
+            type: Types.RequestLogic.CURRENCY.ERC20,
+            value: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+            network: "sepolia",
+          },
+          maxToSpend: "0",
+        },
+        "0.1.0"
       );
-
-      if (hasErc20Approval < 100) {
-        const approvalTx = USDCToken.interface.encodeFunctionData("approve", [
-          "0x67818703c92580c0e106e401F253E8A410A66f8B",
-          ethers.constants.MaxUint256,
-        ]);
-
-        const tx = await signer.sendTransaction({
-          to: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
-          data: approvalTx,
-        });
-
-        await tx.wait(2);
-      }
 
       const tx = await payBatchConversionProxyRequest(
         enrichedRequests,
