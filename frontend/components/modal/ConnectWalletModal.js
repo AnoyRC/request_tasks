@@ -33,7 +33,7 @@ export default function ConnectWalletModal() {
       }}
       className="font-outfit bg-transparent items-center justify-center flex shadow-none"
     >
-      <DialogBody className="text-primary flex flex-col gap-y-4 py-5 font-outfit rounded-3xl bg-secondary border border-[var(--primary)] w-full max-w-[24rem] px-5 pb-6">
+      <DialogBody className="text-primary flex flex-col gap-y-4 py-5 font-outfit rounded-3xl bg-background border border-[var(--primary)] w-full max-w-[24rem] px-5 pb-6">
         <p className="font-extrabold text-xl font-italiana text-center mb-1">
           Connect Wallet
         </p>
@@ -43,7 +43,7 @@ export default function ConnectWalletModal() {
             onClick={() => {
               connect({ connector });
             }}
-            className="bg-secondary border border-primary rounded-full text-primary "
+            className="bg-background border border-primary rounded-full text-primary "
           >
             {connector.name}
           </Button>

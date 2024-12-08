@@ -69,7 +69,13 @@ Get Paid for completing tasks
 
 > Note: The backend requires a Convex Cloud URL to be set in the `.env` file. You can sign up for a free account at [Convex](https://convex.dev/)
 
-4. Start the backend server
+4. Sync functions and schema with Convex Cloud
+
+```bash
+   npx convex dev
+```
+
+5. Start the backend server
 
 ```bash
    npm run start

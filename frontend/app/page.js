@@ -17,7 +17,7 @@ export default function Home() {
         width={1000}
         height={1000}
         alt="Hero Image"
-        className="rounded-lg absolute -bottom-20"
+        className="rounded-lg absolute 2xl:-bottom-20 2xl:scale-100 -bottom-48 scale-50 lg:scale-75 lg:-bottom-48 xl:-bottom-32"
       />
 
       <ConnectWalletButton switchButton={true} />

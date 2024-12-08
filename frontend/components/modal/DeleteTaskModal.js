@@ -59,7 +59,7 @@ export default function DeleteTaskModal() {
       }}
       className="font-outfit bg-transparent items-center justify-center flex shadow-none"
     >
-      <DialogBody className="text-primary flex flex-col gap-y-4 py-5 font-outfit rounded-3xl bg-secondary border border-[var(--primary)] w-full max-w-[24rem] px-5 pb-6">
+      <DialogBody className="text-primary flex flex-col gap-y-4 py-5 font-outfit rounded-3xl bg-background border border-[var(--primary)] w-full max-w-[24rem] px-5 pb-6">
         <p className="font-extrabold text-xl font-italiana text-center mb-1">
           Delete Task
         </p>
@@ -84,7 +84,7 @@ export default function DeleteTaskModal() {
               if (isLoading) return;
               dispatch(toggleDeleteTaskModal());
             }}
-            className="bg-secondary border border-primary rounded-full text-primary normal-case"
+            className="bg-background border border-primary rounded-full text-primary normal-case"
           >
             Cancel
           </Button>

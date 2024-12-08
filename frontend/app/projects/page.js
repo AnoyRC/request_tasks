@@ -53,7 +53,7 @@ export default function Project() {
         {project.map((project) => (
           <div
             key={project._id}
-            className="bg-white w-[24%] min-w-[300px] hover:shadow-lg hover:cursor-pointer border-black border p-3 rounded-xl shadow-sm flex flex-col overflow-hidden relative"
+            className="bg-white w-[24%] min-w-[300px] justify-between hover:shadow-lg hover:cursor-pointer border-black border p-3 rounded-xl shadow-sm flex flex-col overflow-hidden relative"
             onClick={() => {
               router.push(`/board/${project._id}`);
             }}
