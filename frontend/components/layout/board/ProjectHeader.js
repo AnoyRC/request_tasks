@@ -32,9 +32,11 @@ export default function ProjectHeader() {
         <p className="text-lg opacity-60">
           {tasks.length === 0
             ? 0
-            : (tasks.filter((task) => task?.status === "paid").length /
-                tasks.length) *
-              100}
+            : (
+                (tasks.filter((task) => task?.status === "paid").length /
+                  tasks.length) *
+                100
+              ).toFixed(0)}
           % completed
         </p>
         <div className="bg-secondary w-48 h-2 rounded-full mt-2 opacity-70">

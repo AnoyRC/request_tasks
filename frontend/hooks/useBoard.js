@@ -21,6 +21,7 @@ import {
   Types,
   Utils,
 } from "@requestnetwork/request-client.js";
+import { CurrencyManager } from "@requestnetwork/currency";
 import { useWalletClient } from "wagmi";
 import { useEthersProvider } from "@/utils/ethersProvider";
 import {
@@ -28,6 +29,8 @@ import {
   hasErc20Approval,
   hasSufficientFunds,
   payRequest,
+  payBatchConversionProxyRequest,
+  approveErc20BatchConversionIfNeeded,
 } from "@requestnetwork/payment-processor";
 
 export default function useBoard() {
@@ -403,7 +406,7 @@ export default function useBoard() {
     const payeeIdentity = signer._address;
     const payerIdentity = project.owner;
     const paymentRecipient = payeeIdentity;
-    const feeRecipient = ethers.constants.AddressZero;
+    const feeRecipient = project.owner;
 
     const requestCreateParameters = {
       requestInfo: {
@@ -599,38 +602,57 @@ export default function useBoard() {
         },
       });
 
-      for (let i = 0; i < tasks.length; i++) {
-        const task = tasks[i];
-        const request = await requestClient.fromRequestId(task.requestId);
-        let requestData = await request.refresh();
+      const currencyManager = CurrencyManager.getDefault();
 
-        const _hasSufficientFunds = await hasSufficientFunds({
-          request: requestData,
-          address: requestData.payer.value,
-          providerOptions: {
-            provider: provider,
+      const enrichedRequests = await Promise.all(
+        tasks.map(async (task) => {
+          const request = await requestClient.fromRequestId(task.requestId);
+          const requestData = await request.refresh();
+
+          return {
+            request: requestData,
+            paymentSettings: {
+              currency: {
+                type: Types.RequestLogic.CURRENCY.ERC20,
+                value: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+                network: "sepolia",
+              },
+            },
+            paymentNetworkId:
+              Types.Extension.PAYMENT_NETWORK_ID.ERC20_FEE_PROXY_CONTRACT,
+          };
+        })
+      );
+
+      await approveErc20BatchConversionIfNeeded(
+        enrichedRequests[0].request,
+        signer._address,
+        signer,
+        undefined,
+        {
+          currency: {
+            type: Types.RequestLogic.CURRENCY.ERC20,
+            value: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+            network: "sepolia",
           },
-        });
+          maxToSpend: "0",
+        },
+        "0.1.0"
+      );
 
-        if (!_hasSufficientFunds) {
-          toast.error("Insufficient funds");
-          return;
+      const tx = await payBatchConversionProxyRequest(
+        enrichedRequests,
+        signer,
+        {
+          skipFeeUSDLimit: true,
+          conversion: {
+            currencyManager: currencyManager,
+          },
+          version: "0.1.0",
         }
+      );
 
-        const _hasErc20Approval = await hasErc20Approval(
-          requestData,
-          requestData.payer.value,
-          signer
-        );
-
-        if (!_hasErc20Approval) {
-          const approvalTx = await approveErc20(requestData, signer);
-          await approvalTx.wait(2);
-        }
-
-        const paymentTx = await payRequest(requestData, signer);
-        await paymentTx.wait(2);
-      }
+      await tx.wait(2);
 
       await Promise.all(
         tasks.map(async (task) => {
